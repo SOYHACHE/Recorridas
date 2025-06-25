@@ -1,0 +1,400 @@
+<!DOCTYPE html><html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Control de Stock</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: sans-serif;
+      padding: 10px;
+      background: #f9f9f9;
+      font-size: 14px;
+    }
+    .menu {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(3cm, 1fr));
+      gap: 10px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .menu button {
+      width: 3cm;
+      height: 50px;
+      font-size: 14px;
+      text-align: center;
+    }
+    input, button {
+      padding: 8px;
+      font-size: 16px;
+      margin: 6px 0;
+      width: 100%;
+      max-width: 100%;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    #table-container {
+      max-height: 250px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      background: white;
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    th, td {
+      padding: 6px;
+      border: 1px solid #999;
+      text-align: center;
+    }
+    .faltante-neg { background-color: #f44336; color: white; }
+    .faltante-pos { background-color: #ccffcc; }
+    .faltante-cero { background-color: white; }
+    .seccion { display: none; margin-bottom: 60px; }
+    .seccion.activa { display: block; }
+    #scan-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      font-size: 30px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      z-index: 9999;
+    }
+    #scanner-container {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 9998;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    #reader {
+      width: 300px;
+    }
+    @media (max-width: 400px) {
+      body { font-size: 12px; }
+      input, button { font-size: 14px; padding: 6px; }
+      th, td { font-size: 11px; padding: 4px; }
+    }
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #table-container, #table-container * {
+        visibility: visible;
+      }
+      #table-container {
+        position: static !important;
+        max-height: none !important;
+        overflow: visible !important;
+        background: white;
+      }
+      .menu, .seccion {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>  <!-- Escáner -->  <div id="scanner-container">
+    <div id="reader"></div>
+    <button onclick="cerrarScanner()">Cancelar</button>
+  </div>
+  <button id="scan-btn" onclick="iniciarScanner()">📷</button>  <!-- Tabla -->  <div id="table-container">
+    <h3>📋 Lista de Productos</h3>
+    <table id="productTable">
+      <thead>
+        <tr>
+          <th>Orden</th>
+          <th>EAN</th>
+          <th>PLU</th>
+          <th>Descripción</th>
+          <th>Inicial</th>
+          <th>Reposición</th>
+          <th>Venta</th>
+          <th>Recuento</th>
+          <th>Faltante</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>  <!-- Continúa en la siguiente parte... -->
+  <!-- Escáner QR -->
+<div id="scanner-container">
+  <div id="reader"></div>
+  <button onclick="cerrarScanner()">Cancelar</button>
+</div>
+<button id="scan-btn" onclick="iniciarScanner()">📷</button>
+
+<!-- Tabla -->
+<div id="table-container">
+  <h3>📋 Lista de Productos</h3>
+  <table id="productTable">
+    <thead>
+      <tr>
+        <th>Orden</th>
+        <th>EAN</th>
+        <th>PLU</th>
+        <th>Descripción</th>
+        <th>Inicial</th>
+        <th>Reposición</th>
+        <th>Venta</th>
+        <th>Recuento</th>
+        <th>Faltante</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Menú -->
+<div class="menu">
+  <button onclick="mostrarSeccion('apertura')">📦 Apertura</button>
+  <button onclick="mostrarSeccion('ventas')">🛒 Ventas</button>
+  <button onclick="mostrarSeccion('recorrida')">👀 Recorrida</button>
+  <button onclick="mostrarSeccion('reposicion')">🔄 Reposición</button>
+  <button onclick="mostrarSeccion('manual')">✍️ Agregar Manual</button>
+  <button onclick="borrarTodo()">🗑️ Borrar Todo</button>
+  <button onclick="window.print()">🖨️ Imprimir</button>
+  <button onclick="document.getElementById('jsonFile').click()">📂 Importar JSON</button>
+  <input type="file" id="jsonFile" accept=".json" style="display:none;">
+  <button onclick="exportarJSON()">💾 Exportar JSON</button>
+</div>
+
+<!-- Secciones -->
+<div id="seccion-apertura" class="seccion activa">
+  <h3>📦 Registro de Apertura</h3>
+  <input type="text" id="codeInput" placeholder="PLU o EAN">
+  <input type="number" id="initialQtyInput" placeholder="Cantidad Inicial">
+  <input type="text" id="eanInput" placeholder="EAN (si falta)" style="display:none;">
+  <input type="text" id="descInput" placeholder="Descripción" style="display:none;">
+  <button onclick="registrarApertura()">Guardar Apertura</button>
+</div>
+
+<div id="seccion-ventas" class="seccion">
+  <h3>🛒 Registrar Ventas</h3>
+  <input type="text" id="ventaCodeInput" placeholder="PLU o EAN">
+  <input type="number" id="ventaQtyInput" placeholder="Cantidad Vendida">
+  <button onclick="registrarVenta()">Guardar Venta</button>
+</div>
+
+<div id="seccion-recorrida" class="seccion">
+  <h3>👀 Recorrida</h3>
+  <input type="text" id="recuentoCodeInput" placeholder="PLU o EAN">
+  <input type="number" id="recuentoQtyInput" placeholder="Cantidad Contada">
+  <button onclick="registrarRecuento()">Guardar Recorrida</button>
+</div>
+
+<div id="seccion-reposicion" class="seccion">
+  <h3>🔄 Reposición</h3>
+  <input type="text" id="reposicionCodeInput" placeholder="PLU o EAN">
+  <input type="number" id="reposicionQtyInput" placeholder="Cantidad a Reponer">
+  <button onclick="registrarReposicion()">Guardar Reposición</button>
+</div>
+
+<div id="seccion-manual" class="seccion">
+  <h3>✍️ Agregar Manual</h3>
+  <input type="text" id="manualEAN" placeholder="EAN">
+  <input type="text" id="manualPLU" placeholder="PLU">
+  <input type="text" id="manualDESC" placeholder="Descripción">
+  <button onclick="agregarManual()">Agregar Producto</button>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script>
+  let productos = JSON.parse(localStorage.getItem('productos')) || [];
+  let ordenGlobal = productos.length ? Math.max(...productos.map(p => p.ORDEN || 0)) : 0;
+
+  function mostrarSeccion(nombre) {
+    document.querySelectorAll('.seccion').forEach(s => s.classList.remove('activa'));
+    document.getElementById('seccion-' + nombre).classList.add('activa');
+  }
+
+  function renderTabla() {
+    productos.sort((a, b) => (a.ORDEN || 0) - (b.ORDEN || 0));
+    const tbody = document.querySelector('#productTable tbody');
+    tbody.innerHTML = '';
+    productos.forEach(p => {
+      const esperado = (p.INICIAL || 0) + (p.REPOSICION || 0) - (p.VENTA || 0);
+      const faltante = (p.RECUENTO || 0) - esperado;
+      const clase = faltante < 0 ? 'faltante-neg' : (faltante > 0 ? 'faltante-pos' : 'faltante-cero');
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${p.ORDEN || ''}</td>
+        <td>${p.EAN || ''}</td>
+        <td>${p.PLU || ''}</td>
+        <td>${p.DESCRIPCION || ''}</td>
+        <td>${p.INICIAL || 0}</td>
+        <td>${p.REPOSICION || 0}</td>
+        <td>${p.VENTA || 0}</td>
+        <td>${p.RECUENTO || 0}</td>
+        <td class="${clase}">${faltante}</td>`;
+      tbody.appendChild(row);
+    });
+  }
+
+  function registrarApertura() {
+    const code = codeInput.value.trim();
+    const qty = parseFloat(initialQtyInput.value);
+    const ean = eanInput.value.trim();
+    const desc = descInput.value.trim();
+    if (!code || isNaN(qty)) return alert("Ingrese código y cantidad");
+
+    let p = productos.find(p => p.PLU === code || p.EAN === code);
+    if (p) {
+      p.INICIAL = qty;
+      if (!p.EAN && ean) p.EAN = ean;
+      if (!p.DESCRIPCION && desc) p.DESCRIPCION = desc;
+    } else {
+      if (!ean || !desc) return alert("Faltan datos");
+      ordenGlobal++;
+      p = { EAN: ean, PLU: code, DESCRIPCION: desc, INICIAL: qty, REPOSICION: 0, VENTA: 0, RECUENTO: 0, ORDEN: ordenGlobal };
+      productos.push(p);
+    }
+    localStorage.setItem('productos', JSON.stringify(productos));
+    renderTabla();
+    codeInput.value = ''; initialQtyInput.value = '';
+  }
+
+  function registrarVenta() {
+    const code = ventaCodeInput.value.trim();
+    const qty = parseFloat(ventaQtyInput.value);
+    if (!code || isNaN(qty)) return;
+    let p = productos.find(p => p.PLU === code || p.EAN === code);
+    if (!p) return alert("Producto no encontrado");
+    p.VENTA = (p.VENTA || 0) + qty;
+    localStorage.setItem('productos', JSON.stringify(productos));
+    renderTabla();
+    ventaCodeInput.value = '';
+  }
+
+  function registrarRecuento() {
+    const code = recuentoCodeInput.value.trim();
+    const qty = parseFloat(recuentoQtyInput.value);
+    if (!code || isNaN(qty)) return;
+    let p = productos.find(p => p.PLU === code || p.EAN === code);
+    if (!p) return alert("Producto no encontrado");
+    p.RECUENTO = qty;
+    localStorage.setItem('productos', JSON.stringify(productos));
+    renderTabla();
+    recuentoCodeInput.value = '';
+  }
+
+  function registrarReposicion() {
+    const code = reposicionCodeInput.value.trim();
+    const qty = parseFloat(reposicionQtyInput.value);
+    if (!code || isNaN(qty)) return;
+    let p = productos.find(p => p.PLU === code || p.EAN === code);
+    if (!p) return alert("Producto no encontrado");
+    p.REPOSICION = (p.REPOSICION || 0) + qty;
+    localStorage.setItem('productos', JSON.stringify(productos));
+    renderTabla();
+    reposicionCodeInput.value = '';
+  }
+
+  function agregarManual() {
+    const ean = manualEAN.value.trim();
+    const plu = manualPLU.value.trim();
+    const desc = manualDESC.value.trim();
+    if (!ean || !plu || !desc) return alert("Complete todos los campos");
+    ordenGlobal++;
+    productos.push({ EAN: ean, PLU: plu, DESCRIPCION: desc, INICIAL: 0, REPOSICION: 0, VENTA: 0, RECUENTO: 0, ORDEN: ordenGlobal });
+    localStorage.setItem('productos', JSON.stringify(productos));
+    renderTabla();
+    manualEAN.value = ''; manualPLU.value = ''; manualDESC.value = '';
+  }
+
+  function exportarJSON() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(productos));
+    const dl = document.createElement('a');
+    dl.setAttribute("href", dataStr);
+    dl.setAttribute("download", "productos.json");
+    dl.click();
+  }
+
+  function borrarTodo() {
+    if (confirm("¿Seguro que querés borrar todos los datos?")) {
+      productos = [];
+      ordenGlobal = 0;
+      localStorage.removeItem('productos');
+      renderTabla();
+    }
+  }
+
+  document.getElementById('jsonFile').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = function (event) {
+      try {
+        const datos = JSON.parse(event.target.result);
+        if (Array.isArray(datos)) {
+          productos = datos;
+          ordenGlobal = Math.max(...productos.map(p => p.ORDEN || 0));
+          localStorage.setItem('productos', JSON.stringify(productos));
+          renderTabla();
+        }
+      } catch {
+        alert("Error en el archivo");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  function iniciarScanner() {
+    document.getElementById('scanner-container').style.display = 'flex';
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      (decodedText) => {
+        html5QrCode.stop().then(() => {
+          document.getElementById('scanner-container').style.display = 'none';
+          insertarCodigoEnCampoActivo(decodedText);
+        });
+      }
+    ).catch(err => alert("Error escáner: " + err));
+  }
+
+  function cerrarScanner() {
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.stop().then(() => {
+      document.getElementById('scanner-container').style.display = 'none';
+    });
+  }
+
+  function insertarCodigoEnCampoActivo(ean) {
+    const campos = {
+      'seccion-apertura': 'codeInput',
+      'seccion-ventas': 'ventaCodeInput',
+      'seccion-recorrida': 'recuentoCodeInput',
+      'seccion-reposicion': 'reposicionCodeInput'
+    };
+    for (const id in campos) {
+      if (document.getElementById(id).classList.contains('activa')) {
+        const campo = document.getElementById(campos[id]);
+        campo.value = ean;
+        campo.focus();
+      }
+    }
+  }
+
+  window.onload = () => renderTabla();
+</script>
+</html>
